@@ -854,8 +854,9 @@ func addbuildinfo(ctxt *Link) {
 
 // Build info note
 const (
-	ELF_NOTE_BUILDINFO_NAMESZ = 4
-	ELF_NOTE_BUILDINFO_TAG    = 3
+	ELF_NOTE_PACKAGE_METADATA_TAG = 5
+	ELF_NOTE_BUILDINFO_NAMESZ 	 = 4
+	ELF_NOTE_BUILDINFO_TAG    	 = 3
 )
 
 var ELF_NOTE_BUILDINFO_NAME = []byte("GNU\x00")
@@ -898,6 +899,29 @@ func elfwritegobuildid(out *OutBuf) int {
 	return int(sh.Size)
 }
 
+func elfwritepackagemetadata(out *OutBuf) int {
+	// package_metadata := os.Getenv("ELF_PACKAGE_METADATA")
+	// if package_metadata == "" {
+	// 	return 0
+	// }
+
+	// metadataBytes := []byte(package_metadata)
+
+	sh := elfwritenotehdr(out, ".note.package", uint32(len(ELF_NOTE_PACKAGE_METADATA_NAME)), uint32(len(*flagPackageMetadata)), ELF_NOTE_PACKAGE_METADATA_TAG)
+	if sh == nil {
+		fmt.Println("No package metadata passed")
+		return 0
+	}
+
+	out.Write(ELF_NOTE_PACKAGE_METADATA_NAME)
+	// out.Write(metadataBytes)
+	out.Write([]byte(*flagPackageMetadata))
+	var zero = make([]byte, 4)
+	out.Write(zero[:int(Rnd(int64(len(*flagPackageMetadata)), 4) - int64(len(*flagPackageMetadata)))])
+
+	return int(sh.Size)
+}
+
 // Go specific notes
 const (
 	ELF_NOTE_GOPKGLIST_TAG = 1
@@ -907,6 +931,7 @@ const (
 )
 
 var ELF_NOTE_GO_NAME = []byte("Go\x00\x00")
+var ELF_NOTE_PACKAGE_METADATA_NAME = []byte("Package metadata\x00\x00")
 
 var elfverneed int
 
