@@ -854,9 +854,9 @@ func addbuildinfo(ctxt *Link) {
 
 // Build info note
 const (
-	ELF_NOTE_PACKAGE_METADATA_TAG = 5
-	ELF_NOTE_BUILDINFO_NAMESZ 	 = 4
-	ELF_NOTE_BUILDINFO_TAG    	 = 3
+	ELF_NOTE_PACKAGE_METADATA_TAG = 3
+	ELF_NOTE_BUILDINFO_NAMESZ 	  = 4
+	ELF_NOTE_BUILDINFO_TAG    	  = 3
 )
 
 var ELF_NOTE_BUILDINFO_NAME = []byte("GNU\x00")
@@ -868,6 +868,11 @@ func elfbuildinfo(sh *ElfShdr, startva uint64, resoff uint64) int {
 
 func elfgobuildid(sh *ElfShdr, startva uint64, resoff uint64) int {
 	n := len(ELF_NOTE_GO_NAME) + int(Rnd(int64(len(*flagBuildid)), 4))
+	return elfnote(sh, startva, resoff, n)
+}
+
+func elfpackagemetadata(sh *ElfShdr, startva uint64, resoff uint64) int {
+	n := len(ELF_NOTE_PACKAGE_METADATA_NAME) + int(Rnd(int64(len(*flagPackageMetadata)), 4))
 	return elfnote(sh, startva, resoff, n)
 }
 
@@ -909,7 +914,6 @@ func elfwritepackagemetadata(out *OutBuf) int {
 
 	sh := elfwritenotehdr(out, ".note.package", uint32(len(ELF_NOTE_PACKAGE_METADATA_NAME)), uint32(len(*flagPackageMetadata)), ELF_NOTE_PACKAGE_METADATA_TAG)
 	if sh == nil {
-		fmt.Println("No package metadata passed")
 		return 0
 	}
 
@@ -917,7 +921,7 @@ func elfwritepackagemetadata(out *OutBuf) int {
 	// out.Write(metadataBytes)
 	out.Write([]byte(*flagPackageMetadata))
 	var zero = make([]byte, 4)
-	out.Write(zero[:int(Rnd(int64(len(*flagPackageMetadata)), 4) - int64(len(*flagPackageMetadata)))])
+	out.Write(zero[:int(Rnd(int64(len(*flagPackageMetadata)), 4)-int64(len(*flagPackageMetadata)))])
 
 	return int(sh.Size)
 }
@@ -931,7 +935,7 @@ const (
 )
 
 var ELF_NOTE_GO_NAME = []byte("Go\x00\x00")
-var ELF_NOTE_PACKAGE_METADATA_NAME = []byte("Package metadata\x00\x00")
+var ELF_NOTE_PACKAGE_METADATA_NAME = []byte("Package Metadata")
 
 var elfverneed int
 
@@ -1459,6 +1463,7 @@ func (ctxt *Link) doelf() {
 	shstrtabAddstring(".noptrbss")
 	shstrtabAddstring(".go.fuzzcntrs")
 	shstrtabAddstring(".go.buildinfo")
+	shstrtabAddstring(".note.package")
 	if ctxt.IsMIPS() {
 		shstrtabAddstring(".MIPS.abiflags")
 		shstrtabAddstring(".gnu.attributes")
@@ -1487,6 +1492,9 @@ func (ctxt *Link) doelf() {
 	}
 	if *flagBuildid != "" {
 		shstrtabAddstring(".note.go.buildid")
+	}
+	if *flagPackageMetadata != "" {
+		shstrtabAddstring(".note.package")
 	}
 	shstrtabAddstring(".elfdata")
 	shstrtabAddstring(".rodata")
@@ -2031,6 +2039,12 @@ func asmbElf(ctxt *Link) {
 		phsh(getpnote(), sh)
 	}
 
+	if *flagPackageMetadata != "" {
+		sh := elfshname(".note.package")
+		resoff -= int64(elfpackagemetadata(sh, uint64(startva), uint64(resoff)))
+		phsh(getpnote(), sh)
+	}
+
 	// Additions to the reserved area must be above this line.
 
 	elfphload(&Segtext)
@@ -2400,6 +2414,9 @@ elfobj:
 		}
 		if *flagBuildid != "" {
 			a += int64(elfwritegobuildid(ctxt.Out))
+		}
+		if *flagPackageMetadata != "" {
+			a += int64(elfwritepackagemetadata(ctxt.Out))
 		}
 	}
 	if *flagRace && ctxt.IsNetbsd() {
